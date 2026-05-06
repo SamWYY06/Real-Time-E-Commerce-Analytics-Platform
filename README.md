@@ -20,21 +20,7 @@ The system processes data from APIs and synthetic generators, validates it using
 
 ## 🏗️ System Architecture
 
-Data Sources (API / Synthetic Data)
-        ↓
-Python Ingestion Layer
-        ↓
-Apache Kafka (Streaming Layer)
-        ↓
-Python Consumer Processing
-        ↓
-PostgreSQL Data Warehouse
-        ↓
-Apache Airflow (Orchestration)
-        ↓
-Apache Spark (Big Data Processing)
-        ↓
-Power BI Dashboard
+Data Sources (API / Synthetic Data) -> Python Ingestion Layer -> Apache Kafka (Streaming Layer) -> Python Consumer Processing -> PostgreSQL Data Warehouse -> Apache Airflow (Orchestration) -> Apache Spark (Big Data Processing) -> Power BI Dashboard ->
 
 ---
 
