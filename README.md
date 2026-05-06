@@ -27,14 +27,14 @@ Data Sources (API / Synthetic Data) -> Python Ingestion Layer -> Apache Kafka (S
 ## 🛠️ Tech Stack
 
 ### Programming Languages
-- Python
-- SQL
-- Bash / Shell Scripting
+- Python (3.10+)
+- Git
+- Docker (VERY important)
 
 ### Data Engineering Tools
-- Apache Kafka (Event Streaming)
-- Apache Airflow (Workflow Orchestration)
-- Apache Spark (Big Data Processing)
+- Apache Kafka (via Docker)
+- Apache Airflow (via Docker)
+- Apache Spark
 
 ### Databases
 - PostgreSQL (Data Warehouse)
