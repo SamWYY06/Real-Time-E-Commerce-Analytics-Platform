@@ -151,5 +151,5 @@ This project is developed collaboratively using GitHub and SourceTree.
 - BI dashboard development with Power BI
 
 ## 👨‍💻 Author
-Samuel Wong Yu Yang, Besty Tan Mei Yuh
-Data Engineering & Analytics Project
+# Samuel Wong Yu Yang, Besty Tan Mei Yuh
+# Data Engineering & Analytics Project
