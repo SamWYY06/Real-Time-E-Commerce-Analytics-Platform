@@ -121,61 +121,7 @@ airflow standalone
 ```
 
 ## 📁 Project Structure
-### real-time-ecommerce-platform/
-### │
-### ├── README.md
-###├── requirements.txt
-├── .gitignore
-│
-├── ingestion/
-│   ├── event_generator.py
-│   ├── api_ingestion.py
-│
-├── kafka/
-│   ├── producer.py
-│   ├── consumer.py
-│   ├── kafka_config.py
-│
-├── airflow/
-│   ├── dags/
-│   │   ├── etl_pipeline.py
-│   │   ├── data_quality.py
-│   └── airflow_config.py
-│
-├── spark/
-│   ├── spark_etl.py
-│   ├── aggregation.py
-│
-├── sql/
-│   ├── schema.sql
-│   ├── queries.sql
-│
-├── database/
-│   ├── connection.py
-│
-├── nosql/
-│   ├── mongo_ingest.py
-│
-├── dashboard/
-│   ├── README.txt
-│   ├── screenshots/
-│
-├── utils/
-│   ├── logger.py
-│   ├── data_cleaning.py
-│   ├── validation.py
-│
-├── data/
-│   ├── raw/
-│   ├── processed/
-│
-├── scripts/
-│   ├── run_pipeline.sh
-│   ├── setup_env.sh
-│
-└── docker/
-    ├── docker-compose.yml
-
+# TO BE DONE
 ## 👥 Collaboration
 This project is developed collaboratively using GitHub and SourceTree.
 
