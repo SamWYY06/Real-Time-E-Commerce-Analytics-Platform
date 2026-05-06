@@ -121,10 +121,10 @@ airflow standalone
 ```
 
 ## 📁 Project Structure
-real-time-ecommerce-platform/
-│
-├── README.md
-├── requirements.txt
+### real-time-ecommerce-platform/
+### │
+### ├── README.md
+###├── requirements.txt
 ├── .gitignore
 │
 ├── ingestion/
