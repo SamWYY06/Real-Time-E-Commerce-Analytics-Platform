@@ -1,9 +1,12 @@
+# POSTGRESQL CONNECTIONS
 import psycopg2
 
 def get_connection():
-    return psycopg2.connect(
+    conn = psycopg2.connect(
         host="localhost",
         database="ecommerce",
         user="postgres",
-        password="postgres"
+        password="postgres",
+        port=5433
     )
+    return conn

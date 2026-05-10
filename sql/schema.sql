@@ -1,21 +1,44 @@
-CREATE TABLE users (
-    user_id SERIAL PRIMARY KEY,
-    country VARCHAR(50),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+-- TABLES DESIGN
+
+-- USED FOR ANALYZING USER BEHAVIOR, PRODUCT PERFORMANCE, AND SALES TRENDS
+CREATE TABLE dim_user (
+    user_id INT PRIMARY KEY,
+    user_segment VARCHAR(50),
+    country VARCHAR(100),
+    signup_date DATE
 );
 
-CREATE TABLE products (
-    product_id SERIAL PRIMARY KEY,
-    price NUMERIC(10,2)
+-- USED FOR ANALYZING PRODUCT PERFORMANCE, CATEGORIZATION, AND PRICING STRATEGIES
+CREATE TABLE dim_product (
+    product_id INT PRIMARY KEY,
+    product_name VARCHAR(255),
+    category VARCHAR(100),
+    brand VARCHAR(100),
+    price FLOAT
 );
 
-CREATE TABLE events (
+-- GROUP BY DAY, MONTH, YEAR, WEEKDAY
+CREATE TABLE dim_date (
+    date_id SERIAL PRIMARY KEY,
+    full_date DATE,
+    day INT,
+    month INT,
+    year INT,
+    weekday VARCHAR(20)
+);
+
+-- MAIN TABLE FOR ANALYTICS, CONTAINING ALL EVENTS
+CREATE TABLE fact_ecommerce_events (
     event_id SERIAL PRIMARY KEY,
 
-    user_id INT REFERENCES users(user_id),
-    product_id INT REFERENCES products(product_id),
+    user_id INT REFERENCES dim_user(user_id),
+    product_id INT REFERENCES dim_product(product_id),
+    date_id INT REFERENCES dim_date(date_id),
+
+    product_name VARCHAR(255),
 
     event_type VARCHAR(50),
-
-    event_timestamp INT
+    price FLOAT,
+    event_timestamp TIMESTAMP,
+    source VARCHAR(20)
 );
