@@ -1,7 +1,7 @@
 -- TABLES DESIGN
 
 -- USED FOR ANALYZING USER BEHAVIOR, PRODUCT PERFORMANCE, AND SALES TRENDS
-CREATE TABLE dim_user (
+CREATE TABLE IF NOT EXISTS dim_user (
     user_id INT PRIMARY KEY,
     user_segment VARCHAR(50),
     country VARCHAR(100),
@@ -9,7 +9,7 @@ CREATE TABLE dim_user (
 );
 
 -- USED FOR ANALYZING PRODUCT PERFORMANCE, CATEGORIZATION, AND PRICING STRATEGIES
-CREATE TABLE dim_product (
+CREATE TABLE IF NOT EXISTS dim_product (
     product_id INT PRIMARY KEY,
     product_name VARCHAR(255),
     category VARCHAR(100),
@@ -18,7 +18,7 @@ CREATE TABLE dim_product (
 );
 
 -- GROUP BY DAY, MONTH, YEAR, WEEKDAY
-CREATE TABLE dim_date (
+CREATE TABLE IF NOT EXISTS dim_date (
     date_id SERIAL PRIMARY KEY,
     full_date DATE,
     day INT,
@@ -27,8 +27,17 @@ CREATE TABLE dim_date (
     weekday VARCHAR(20)
 );
 
+-- USED TO STORE EVENTS THAT FAILED VALIDATION OR PROCESSING, ALLOWING FOR LATER REVIEW AND ANALYSIS
+CREATE TABLE IF NOT EXISTS rejected_events (
+    id SERIAL PRIMARY KEY,
+    event_id VARCHAR(50) REFERENCES fact_ecommerce_events(event_id),
+    reason VARCHAR(255),
+    raw_payload JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- MAIN TABLE FOR ANALYTICS, CONTAINING ALL EVENTS
-CREATE TABLE fact_ecommerce_events (
+CREATE TABLE IF NOT EXISTS fact_ecommerce_events (
     event_id SERIAL PRIMARY KEY,
 
     user_id INT REFERENCES dim_user(user_id),

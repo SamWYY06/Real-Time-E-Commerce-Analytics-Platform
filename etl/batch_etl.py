@@ -85,7 +85,7 @@ def load_dim_user(cursor, df):
 
 
 # ----------------------------
-# DIM: PRODUCT (ONLY price, no base_price column issue)
+# DIM: PRODUCT
 # ----------------------------
 def load_dim_product(cursor, df):
 

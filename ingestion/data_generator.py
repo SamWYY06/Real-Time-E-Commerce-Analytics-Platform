@@ -125,7 +125,7 @@ def generate_event(messy=False):
     else:
         event_type = random.choices(EVENT_TYPES, [0.2, 0.3, 0.5])[0]
 
-    # ✅ ALWAYS start from product price
+    # ALWAYS start from product price
     price = product["price"]
 
     # ---------------- EVENT OBJECT ----------------

@@ -1,1 +1,51 @@
+# To run the process:
 
+1. Start Docker
+# docker-compose up -d
+
+1.1 Check for containers
+# docker ps
+
+2. Create Kafka Topic
+# docker exec -it kafka kafka-topics --create \
+# --topic ecommerce-events \
+# --bootstrap-server localhost:9092 \
+# --partitions 1 \
+# --replication-factor 1
+
+2.1 Verify:
+# docker exec -it kafka kafka-topics --list --bootstrap-server localhost:9092
+
+3. Create PostgreSQL Table (One time only)
+# docker exec -it postgres_db psql -U postgres -d ecommerce
+
+3.1 Then create all the schemas and tables:
+
+
+3.2 Exit:
+#  \q
+
+4. Start Stream Pipeline (Open 2 terminals)
+
+4.1 Stream ETL
+# python -m ingestion.stream_generator 
+
+4.1.1 Stream Generator (Producer)
+# python -m etl.stream_etl
+
+4.2 Batch ETL
+# python -m ingestion.batch_generator
+
+4.2.1 Batch Generator (Producer)
+# python -m etl.batch_etl
+
+6. Check Data in PostgreSQL (Terminal 3)
+# docker exec -it postgres_db psql -U postgres -d ecommerce
+
+6.1 Then:
+# SELECT * FROM fact_ecommerce_events ORDER BY event_timestamp DESC LIMIT 10;
+# SELECT * FROM fact_ecommerce_events WHERE source = 'stream' ORDER BY event_timestamp;
+
+7. Reset everything:
+# docker-compose down -v
+# docker-compose up -d

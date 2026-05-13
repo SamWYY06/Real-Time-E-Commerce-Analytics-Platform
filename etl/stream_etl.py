@@ -134,10 +134,7 @@ def ensure_date(cursor, ts):
 # ----------------------------
 # FACT INSERT
 # ----------------------------
-def insert_event(event):
-
-    conn = get_connection()
-    cursor = conn.cursor()
+def insert_event(cursor, event):
 
     ensure_user(cursor, event)
     ensure_product(cursor, event)
@@ -161,9 +158,22 @@ def insert_event(event):
         "stream"
     ))
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+# ----------------------------
+# LOGGING REJECTED EVENTS
+# ----------------------------
+def log_rejected_event(cursor, event, reason):
+    try:
+        cursor.execute("""
+            INSERT INTO rejected_events (event_id, reason, raw_payload)
+            VALUES (%s, %s, %s)
+        """, (
+            str(event.get("event_id", "unknown")),
+            reason,
+            json.dumps(event)
+        ))
+    except Exception as e:
+        print("Failed to log rejected event:", e)
+
 
 
 # ----------------------------
@@ -171,10 +181,15 @@ def insert_event(event):
 # ----------------------------
 def run_stream_etl():
 
+    conn = get_connection()
+    cursor = conn.cursor()
+
     processed = 0
     inserted = 0
     dropped = 0
     reasons = defaultdict(int)
+
+    BATCH_SIZE = 20  # commit every 50 events
 
     print("⚡ STREAM ETL STARTED")
 
@@ -186,12 +201,18 @@ def run_stream_etl():
         cleaned, reason = clean_event(event)
 
         if cleaned:
-            insert_event(cleaned)
+            insert_event(cursor, cleaned)
             inserted += 1
         else:
             dropped += 1
             reasons[reason] += 1
+            log_rejected_event(cursor, event, reason)
 
+        # Batch commit
+        if processed % BATCH_SIZE == 0:
+            conn.commit()
+
+        # 📊 Stats print
         if processed % 1 == 0:
             print(f"""
 📊 STREAM STATS
@@ -203,6 +224,10 @@ Dropped: {dropped}
             print("🚨 DROP REASONS")
             for k, v in reasons.items():
                 print(f" - {k}: {v}")
+
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 
 if __name__ == "__main__":
