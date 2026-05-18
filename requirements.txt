@@ -3,7 +3,22 @@
 1. Start Docker
 # docker-compose up -d
 
-1.1 Check for containers
+1.1 Initialize Airflow DB: (Still in progress)
+# docker exec -it airflow_webserver airflow db init
+
+1.2 Create Airflow User: (Still in progress)
+# docker exec -it airflow_webserver airflow users create \
+#   --username admin \
+#   --password admin \
+#   --firstname admin \
+#   --lastname admin \
+#   --role Admin \
+#   --email admin@example.com
+
+1.3 Access Airflow UI: (Still in progress)
+# Open http://localhost:8080 in your browser and log in with admin/admin
+
+1.4 Check for containers
 # docker ps
 
 2. Create Kafka Topic
@@ -39,13 +54,13 @@
 4.2.1 Batch Generator (Producer)
 # python -m etl.batch_etl
 
-6. Check Data in PostgreSQL (Terminal 3)
+5. Check Data in PostgreSQL (Terminal 3)
 # docker exec -it postgres_db psql -U postgres -d ecommerce
 
-6.1 Then:
+5.1 Then:
 # SELECT * FROM fact_ecommerce_events ORDER BY event_timestamp DESC LIMIT 10;
 # SELECT * FROM fact_ecommerce_events WHERE source = 'stream' ORDER BY event_timestamp;
 
-7. Reset everything:
+6. Reset everything:
 # docker-compose down -v
 # docker-compose up -d

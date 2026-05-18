@@ -1,5 +1,6 @@
 import random
 import time
+import uuid
 
 PRODUCTS = [
     # ---------------- ELECTRONICS ----------------
@@ -130,6 +131,8 @@ def generate_event(messy=False):
 
     # ---------------- EVENT OBJECT ----------------
     event = {
+        "event_id": str(uuid.uuid4()),
+
         "user_id": user_id,
         "user_segment": segment,
         "country": country,
@@ -179,5 +182,12 @@ def generate_event(messy=False):
         # 10% missing category
         if random.random() < 0.10:
             event.pop("category", None)
+        # 5% missing price
+        if random.random() < 0.05:
+            event["price"] = None
+
+        # 5% missing field entirely
+        if random.random() < 0.05:
+            event.pop("price", None)
 
     return event

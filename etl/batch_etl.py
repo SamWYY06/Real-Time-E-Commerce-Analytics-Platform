@@ -1,6 +1,8 @@
 import pandas as pd
 from datetime import datetime
 from collections import defaultdict
+import json
+import math
 
 from database.connection import get_connection
 
@@ -13,41 +15,25 @@ def extract_data(file_path):
 
 
 # ----------------------------
-# TRANSFORM
+# SAFE JSON HANDLER
 # ----------------------------
-def transform_data(df):
+def clean_json_payload(obj):
+    """
+    Convert NaN → None so PostgreSQL JSON accepts it
+    """
+    cleaned = {}
 
-    original_len = len(df)
-    reasons = defaultdict(int)
+    for k, v in obj.items():
+        if isinstance(v, float) and math.isnan(v):
+            cleaned[k] = None
+        else:
+            cleaned[k] = v
 
-    df = df.drop_duplicates()
-
-    # numeric conversion
-    df["user_id"] = pd.to_numeric(df["user_id"], errors="coerce")
-    df["product_id"] = pd.to_numeric(df["product_id"], errors="coerce")
-    df["price"] = pd.to_numeric(df["price"], errors="coerce")
-
-    # missing values
-    reasons["missing_user_id"] += df["user_id"].isna().sum()
-    reasons["missing_product_id"] += df["product_id"].isna().sum()
-    reasons["missing_price"] += df["price"].isna().sum()
-
-    df = df.dropna(subset=["user_id", "product_id", "price"])
-
-    # event validation
-    valid_events = ["view", "click", "purchase"]
-    reasons["invalid_event_type"] += (~df["event_type"].isin(valid_events)).sum()
-    df = df[df["event_type"].isin(valid_events)]
-
-    # price rules
-    reasons["non_positive_price"] += (df["price"] <= 0).sum()
-    df = df[df["price"] > 0]
-
-    return df, reasons, original_len
+    return json.dumps(cleaned)
 
 
 # ----------------------------
-# DATE DIM
+# DATE PARSER
 # ----------------------------
 def parse_date(ts):
     dt = datetime.fromtimestamp(ts)
@@ -60,6 +46,73 @@ def parse_date(ts):
         "weekday": dt.strftime("%A")
     }
 
+
+# ----------------------------
+# TRANSFORM (CLEAN + REJECT TRACKING)
+# ----------------------------
+def transform_data(df):
+
+    original_len = len(df)
+    reasons = defaultdict(int)
+
+    rejected_rows = []
+
+    df = df.drop_duplicates()
+
+    # ---------------- TYPE CONVERSION ----------------
+    df["user_id"] = pd.to_numeric(df["user_id"], errors="coerce")
+    df["product_id"] = pd.to_numeric(df["product_id"], errors="coerce")
+    df["price"] = pd.to_numeric(df["price"], errors="coerce")
+
+    # ---------------- MISSING VALUES ----------------
+    mask = df["user_id"].isna()
+    reasons["missing_user_id"] += mask.sum()
+    rejected_rows.append(df[mask].assign(reason="missing_user_id"))
+    df = df[~mask]
+
+    mask = df["product_id"].isna()
+    reasons["missing_product_id"] += mask.sum()
+    rejected_rows.append(df[mask].assign(reason="missing_product_id"))
+    df = df[~mask]
+
+    mask = df["price"].isna()
+    reasons["missing_price"] += mask.sum()
+    rejected_rows.append(df[mask].assign(reason="missing_price"))
+    df = df[~mask]
+
+    # ---------------- TYPE SAFETY ----------------
+    df["user_id"] = df["user_id"].astype(int)
+    df["product_id"] = df["product_id"].astype(int)
+
+    # ---------------- EVENT TYPE ----------------
+    valid_events = ["view", "click", "purchase"]
+
+    mask = ~df["event_type"].isin(valid_events)
+    reasons["invalid_event_type"] += mask.sum()
+    rejected_rows.append(df[mask].assign(reason="invalid_event_type"))
+    df = df[~mask]
+
+    # ---------------- PRICE ----------------
+    mask = df["price"] <= 0
+    reasons["non_positive_price"] += mask.sum()
+    rejected_rows.append(df[mask].assign(reason="non_positive_price"))
+    df = df[~mask]
+
+    # ---------------- PRODUCT RANGE ----------------
+    mask = (df["product_id"] < 1) | (df["product_id"] > 70)
+    reasons["invalid_product_id_out_of_range"] += mask.sum()
+    rejected_rows.append(df[mask].assign(reason="invalid_product_id_out_of_range"))
+    df = df[~mask]
+
+    # ---------------- USER VALIDATION ----------------
+    mask = df["user_id"] <= 0
+    reasons["invalid_user_id"] += mask.sum()
+    rejected_rows.append(df[mask].assign(reason="invalid_user_id"))
+    df = df[~mask]
+
+    rejected_df = pd.concat(rejected_rows, ignore_index=True) if rejected_rows else pd.DataFrame()
+
+    return df, rejected_df, reasons, original_len
 
 # ----------------------------
 # DIM: USER
@@ -145,10 +198,12 @@ def load_fact(cursor, df):
 
         cursor.execute("""
             INSERT INTO fact_ecommerce_events
-            (user_id, product_id, date_id, product_name,
+            (event_id, user_id, product_id, date_id, product_name,
              event_type, price, event_timestamp, source)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (event_id) DO NOTHING
         """, (
+            str(row["event_id"]),
             int(row["user_id"]),
             int(row["product_id"]),
             date_id,
@@ -161,25 +216,113 @@ def load_fact(cursor, df):
 
 
 # ----------------------------
-# LOAD ORCHESTRATOR
+# REJECTED EVENTS LOADER
 # ----------------------------
-def load_data(df):
+def load_rejected_events(cursor, rejected_df):
+
+    if rejected_df.empty:
+        return
+
+    for _, row in rejected_df.iterrows():
+
+        cursor.execute("""
+            INSERT INTO rejected_events (event_id, reason, raw_payload)
+            VALUES (%s, %s, %s)
+        """, (
+            str(row.get("event_id", "unknown")),
+            row["reason"],
+            clean_json_payload(row.to_dict()),
+            "batch"
+        ))
+
+# ----------------------------
+# LOAD PIPELINE
+# ----------------------------
+def load_data(df, rejected_df):
 
     conn = get_connection()
     cursor = conn.cursor()
 
-    # DIMENSIONS FIRST (important for FK integrity)
     load_dim_user(cursor, df)
     load_dim_product(cursor, df)
     load_dim_date(cursor, df)
 
-    # FACT TABLE
     load_fact(cursor, df)
+    load_rejected_events(cursor, rejected_df)
 
     conn.commit()
     cursor.close()
     conn.close()
 
+def log_batch_metrics(cursor, total, inserted, dropped):
+
+    cursor.execute("""
+        INSERT INTO data_quality_metrics
+        (source, total_events, inserted_events, dropped_events)
+        VALUES (%s, %s, %s, %s)
+    """, (
+        "batch",
+        total,
+        inserted,
+        dropped
+    ))
+# ----------------------------
+# LOGGING RAW EVENTS
+# ----------------------------
+def log_raw_batch(cursor, df):
+
+    for _, row in df.iterrows():
+        cursor.execute("""
+            INSERT INTO raw_events (event_id, payload, source)
+            VALUES (%s, %s, %s)
+        """, (
+            str(row.get("event_id", "unknown")),
+            clean_json_payload(row.to_dict()),
+            "batch"
+        ))
+
+# ----------------------------
+# BATCH AGGREGATIONS
+# ----------------------------
+def run_batch_aggregations(cursor):
+
+    # Daily sales
+    cursor.execute("""
+        INSERT INTO agg_daily_sales (date_id, total_revenue, total_orders)
+        SELECT
+            date_id,
+            SUM(price),
+            COUNT(*)
+        FROM fact_ecommerce_events
+        WHERE event_type = 'purchase'
+        GROUP BY date_id
+        ON CONFLICT (date_id)
+        DO UPDATE SET
+            total_revenue = EXCLUDED.total_revenue,
+            total_orders = EXCLUDED.total_orders,
+            updated_at = CURRENT_TIMESTAMP
+    """)
+
+    # Product performance
+    cursor.execute("""
+        INSERT INTO agg_product_performance
+        (product_id, total_views, total_clicks, total_purchases, total_revenue)
+        SELECT
+            product_id,
+            COUNT(*) FILTER (WHERE event_type = 'view'),
+            COUNT(*) FILTER (WHERE event_type = 'click'),
+            COUNT(*) FILTER (WHERE event_type = 'purchase'),
+            SUM(price) FILTER (WHERE event_type = 'purchase')
+        FROM fact_ecommerce_events
+        GROUP BY product_id
+        ON CONFLICT (product_id)
+        DO UPDATE SET
+            total_views = EXCLUDED.total_views,
+            total_clicks = EXCLUDED.total_clicks,
+            total_purchases = EXCLUDED.total_purchases,
+            total_revenue = EXCLUDED.total_revenue,
+            updated_at = CURRENT_TIMESTAMP
+    """)
 
 # ----------------------------
 # RUN BATCH ETL
@@ -188,23 +331,87 @@ def run_batch_etl():
 
     print("🚀 BATCH ETL STARTED")
 
+    # ----------------------------
+    # EXTRACT
+    # ----------------------------
     df = extract_data("data/raw/synthetic_data.csv")
+    original_len = len(df)
 
-    print(f"📦 Raw rows: {len(df)}")
+    print(f"📦 Raw rows: {original_len}")
 
-    df_clean, reasons, original_len = transform_data(df)
+    # ----------------------------
+    # TRANSFORM
+    # ----------------------------
+    df_clean, rejected_df, reasons, original_len = transform_data(df)
 
-    print(f"🧹 Cleaned rows: {len(df_clean)}")
-    print(f"❌ Dropped rows: {original_len - len(df_clean)}")
+    inserted = len(df_clean)
+    dropped = original_len - inserted
+
+    print(f"🧹 Cleaned rows: {inserted}")
+    print(f"❌ Dropped rows: {dropped}")
 
     print("\n🚨 DROP REASONS")
     for k, v in reasons.items():
         print(f" - {k}: {v}")
 
-    load_data(df_clean)
+    # ----------------------------
+    # DB CONNECTION
+    # ----------------------------
+    conn = get_connection()
+    cursor = conn.cursor()
+    # LOG RAW DATA FIRST
+    log_raw_batch(cursor, df)
 
-    print("✅ Batch ETL Completed")
+    try:
+        # ----------------------------
+        # LOG DATA QUALITY METRICS
+        # ----------------------------
+        cursor.execute("""
+            INSERT INTO data_quality_metrics
+            (source, total_events, inserted_events, dropped_events)
+            VALUES (%s, %s, %s, %s)
+        """, (
+            "batch",
+            original_len,
+            inserted,
+            dropped
+        ))
 
+        conn.commit()  # commit metrics separately
+
+        # ----------------------------
+        # LOAD DATA
+        # ----------------------------
+        load_dim_user(cursor, df_clean)
+        load_dim_product(cursor, df_clean)
+        load_dim_date(cursor, df_clean)
+
+        load_fact(cursor, df_clean)
+
+        if not rejected_df.empty:
+            for _, row in rejected_df.iterrows():
+                cursor.execute("""
+                    INSERT INTO rejected_events (event_id, reason, raw_payload, source)
+                    VALUES (%s, %s, %s, %s)
+                """, (
+                    str(row.get("event_id", "unknown")),
+                    row["reason"],
+                    clean_json_payload(row.to_dict()),
+                    "batch"
+                )) 
+        run_batch_aggregations(cursor)
+
+        conn.commit()
+
+        print("✅ Batch ETL Completed")
+
+    except Exception as e:
+        conn.rollback()
+        print("❌ Batch ETL Failed:", e)
+
+    finally:
+        cursor.close()
+        conn.close()
 
 if __name__ == "__main__":
     run_batch_etl()

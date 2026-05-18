@@ -1,34 +1,34 @@
-# SCHEDULED ETL JOBS
 from airflow import DAG
 from airflow.operators.python import PythonOperator # type: ignore
-from datetime import datetime
-import os
+from datetime import datetime, timedelta
 
-# import your ETL
 from etl.batch_etl import run_batch_etl
 
-
 default_args = {
-    "start_date": datetime(2026, 05, 7),
-    "retries": 1
+    "owner": "airflow",
+    "depends_on_past": False,
+    "start_date": datetime(2026, 5, 7),
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
 }
-
-dag = DAG(
-    "ecommerce_etl_pipeline",
-    default_args=default_args,
-    schedule_interval="@daily",
-    catchup=False
-)
 
 
 def run_etl():
+    print("Starting Batch ETL...")
     run_batch_etl()
+    print("Batch ETL Finished.")
 
 
-task1 = PythonOperator(
-    task_id="run_batch_etl",
-    python_callable=run_etl,
-    dag=dag
-)
+with DAG(
+    dag_id="ecommerce_etl_pipeline",
+    default_args=default_args,
+    schedule_interval="@daily",
+    catchup=False,
+) as dag:
 
-task1
+    batch_task = PythonOperator(
+        task_id="run_batch_etl",
+        python_callable=run_etl,
+    )
+
+    batch_task
